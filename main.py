@@ -273,6 +273,7 @@ for _, result in enumerate(results):
     y_test_pred = np.exp(result['y_test_pred'])
 
     fig.add_trace(go.Scatter(x=y_test.ravel(), y=y_test_pred.ravel(), mode='markers', name=result['model_name']), row=row_idx, col=col_idx)
+
     row_idx += 1
 
 fig.update_layout(
