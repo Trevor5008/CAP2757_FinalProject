@@ -180,7 +180,10 @@ for col in categorical_cols:
     X[col] = X[col].astype('category')
     X[col] = X[col].cat.codes
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+# Train/Test slider control
+st.subheader("Test Size Allocation (%)")
+test_size = st.select_slider(label="", value=25, options=[i for i in range(5,35,5)])
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
 x_scaler = MinMaxScaler()
 X_train['PROPERTYSQFT'] = x_scaler.fit_transform(X_train['PROPERTYSQFT'].values.reshape(-1,1))
