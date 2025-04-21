@@ -198,30 +198,55 @@ for col in categorical_cols:
     X[col] = X[col].astype('category')
     X[col] = X[col].cat.codes
 
+
 # 3D plot of lat/long locations
 st.subheader(":world_map: Map of Property Listings (NY Area)", divider="grey")
 # drop n/a vals
-map_df = df[['LATITUDE', 'LONGITUDE', 'TYPE', 'PRICE']].dropna()
+map_df = df[['LATITUDE', 'LONGITUDE', 'TYPE', 'PRICE']].dropna().copy()
+price_min = map_df['PRICE'].min()
+price_max = map_df['PRICE'].max()
+
+map_df['price_scaled'] = (map_df['PRICE'] - price_min) / (price_max - price_min)
+
+# Color gradient defined
+map_df['R'] = (map_df['price_scaled'] * 256).astype(int)
+map_df['G'] = 30 
+map_df['B'] = (255 - map_df['R']).astype(int) 
+map_df['A'] = 160
+
+map_df['COLOR'] = map_df[['R', 'G', 'B', 'A']].values.tolist()
 
 layer = pdk.Layer(
         "ScatterplotLayer",
         data=map_df,
         get_position='[LONGITUDE, LATITUDE]',
-        get_color='[200,30,0,160]',
-        get_radius=200,
+        get_color='COLOR',
+        get_radius=100,
+        pickable=True
         )
 
 view_state = pdk.ViewState(
-        latitude=40.7128,
-        longitude=-74.0060,
+        latitude=40.7128, longitude=-74.0060,
         zoom=9,
         pitch=30
         )
 
-
 # Render 3d chart
-st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{TYPE}\n${PRICE}"}))
+col1, col2 = st.columns([6,1]) 
 
+with col1:
+    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{TYPE}\n${PRICE}"}))
+with col2:
+    st.markdown("#### Color Legend")
+    st.markdown("""
+    <div style="width: 100%; padding-top: 10px;">
+        <div style="height: 20px; width: 100%; background: linear-gradient(to right, blue, red); border-radius: 5px;"></div>
+        <div style="display: flex; justify-content: space-between; font-size: 14px;">
+            <span style="color: #777;">Low</span>
+            <span style="color: #777;">High</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 # Train/Test slider control
 st.subheader("Test Size Allocation (%)")
 test_size = st.select_slider(label="", value=25, options=[i for i in range(5,35,5)])
