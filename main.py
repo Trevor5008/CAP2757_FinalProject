@@ -76,6 +76,59 @@ df = df[(df['PRICE'] >= lower_bound) & (df['PRICE'] <= upper_iqr)]
 
 house_types = df.TYPE.unique()
 
+# 3D plot of lat/long locations
+st.subheader(":world_map: Map of Property Listings (NY Area)", divider="grey")
+# drop n/a vals
+map_df = df[['LATITUDE', 'LONGITUDE', 'TYPE', 'PRICE']].dropna().copy()
+price_min = map_df['PRICE'].min()
+price_max = map_df['PRICE'].max()
+
+map_df['price_scaled'] = (map_df['PRICE'] - price_min) / (price_max - price_min)
+
+# Color gradient defined
+map_df['R'] = (map_df['price_scaled'] * 256).astype(int)
+map_df['G'] = 30 
+map_df['B'] = (255 - map_df['R']).astype(int) 
+map_df['A'] = 160
+
+map_df['COLOR'] = map_df[['R', 'G', 'B', 'A']].values.tolist()
+
+layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=map_df,
+        get_position='[LONGITUDE, LATITUDE]',
+        get_color='COLOR',
+        get_radius=100,
+        pickable=True
+        )
+
+view_state = pdk.ViewState(
+        latitude=40.7128, longitude=-74.0060,
+        zoom=9,
+        pitch=30
+        )
+
+# Render 3d chart
+col1, col2 = st.columns([6,1]) 
+
+with col1:
+    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{TYPE}\n${PRICE}"}))
+with col2:
+    st.markdown("#### Color Legend")
+    st.markdown("""
+    <div style="width: 100%; padding-top: 10px;">
+        <div style="height: 20px; width: 100%; background: linear-gradient(to right, blue, red); border-radius: 5px;"></div>
+        <div style="display: flex; justify-content: space-between; font-size: 14px;">
+            <span style="color: #777;">Low</span>
+            <span style="color: #777;">High</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+
+
+
 # Histogram figure
 fig_hist = make_subplots(rows=3, cols=2, subplot_titles=house_types)
 row_idx, col_idx = 1,1
@@ -200,54 +253,7 @@ for col in categorical_cols:
     X[col] = X[col].cat.codes
 
 
-# 3D plot of lat/long locations
-st.subheader(":world_map: Map of Property Listings (NY Area)", divider="grey")
-# drop n/a vals
-map_df = df[['LATITUDE', 'LONGITUDE', 'TYPE', 'PRICE']].dropna().copy()
-price_min = map_df['PRICE'].min()
-price_max = map_df['PRICE'].max()
 
-map_df['price_scaled'] = (map_df['PRICE'] - price_min) / (price_max - price_min)
-
-# Color gradient defined
-map_df['R'] = (map_df['price_scaled'] * 256).astype(int)
-map_df['G'] = 30 
-map_df['B'] = (255 - map_df['R']).astype(int) 
-map_df['A'] = 160
-
-map_df['COLOR'] = map_df[['R', 'G', 'B', 'A']].values.tolist()
-
-layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=map_df,
-        get_position='[LONGITUDE, LATITUDE]',
-        get_color='COLOR',
-        get_radius=100,
-        pickable=True
-        )
-
-view_state = pdk.ViewState(
-        latitude=40.7128, longitude=-74.0060,
-        zoom=9,
-        pitch=30
-        )
-
-# Render 3d chart
-col1, col2 = st.columns([6,1]) 
-
-with col1:
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{TYPE}\n${PRICE}"}))
-with col2:
-    st.markdown("#### Color Legend")
-    st.markdown("""
-    <div style="width: 100%; padding-top: 10px;">
-        <div style="height: 20px; width: 100%; background: linear-gradient(to right, blue, red); border-radius: 5px;"></div>
-        <div style="display: flex; justify-content: space-between; font-size: 14px;">
-            <span style="color: #777;">Low</span>
-            <span style="color: #777;">High</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
 
 # Train/Test slider control
 st.subheader("Test Size Allocation (%)")
@@ -308,6 +314,13 @@ with st.spinner("Preparing data..."):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.25, random_state = 42, stratify=X['combined_cols'])
 
+    drop_cols = ['BEDS' , 'BATH' , 'PROPERTYSQFT' , 'combined_cols' , 'LATITUDE' , 'LONGITUDE']
+
+    X_train = X_train.drop(columns = drop_cols)
+    X_test = X_test.drop(columns = drop_cols)
+
+
+
     X_train['Area'] , area_scaler = make_scaler(X_train['Area'])
     X_train['Area_sqrt'] , area_sqrt_scaler = make_scaler(X_train['Area_sqrt'])
     X_train['Area_log'] , area_log_scaler = make_scaler(X_train['Area_log'])
@@ -340,10 +353,29 @@ with st.spinner("Preparing data..."):
     y_train = y_scaler.fit_transform(y_train.values.reshape(-1, 1)) 
     y_test = y_scaler.transform(y_test.values.reshape(-1, 1))
 
-    drop_cols = ['BEDS' , 'BATH' , 'PROPERTYSQFT' , 'combined_cols' , 'LATITUDE' , 'LONGITUDE']
 
-    X_train = X_train.drop(columns = drop_cols)
-    X_test = X_test.drop(columns = drop_cols)
+    X_train['Price'] = y_train
+
+    corr_mat = X_train.corr()
+    mask = np.triu(np.ones_like(corr_mat, dtype=bool))  # Upper triangle including diagonal
+    masked_corr = corr_mat.mask(mask)
+
+    st.subheader("Correlation Matrix", divider="grey")
+    fig = px.imshow(masked_corr, 
+                    labels=dict(x="", y="", color="Correlation"),
+                    x=corr_mat.columns,
+                    y=corr_mat.index,
+                    color_continuous_scale=px.colors.diverging.RdBu,
+                    range_color=[-1, 1] ,
+                    text_auto='.2f' ) # Optional: set color scale range
+    
+    fig.update_layout(width = 1000 , height = 800)
+
+    st.plotly_chart(fig , use_container_width=True)
+
+    X_train = X_train.drop('Price' , axis = 1)
+
+    
 
     rf = RandomForestRegressor(
         n_estimators=100,
