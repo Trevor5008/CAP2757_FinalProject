@@ -41,7 +41,6 @@ df = df[set_cols]
 st.set_page_config(layout="wide")
 st.title("CAP2757 - Final Project - NY Housing Data")
 
-
 # Expander of raw data toggle
 with st.expander("View Raw Data"):
     st.dataframe(df)
@@ -129,8 +128,6 @@ rejected, pvals_corrected, _, _ = multipletests(res['p-value'], alpha=0.05, meth
 res['p_value_corrected'] = pvals_corrected
 res['rejected'] = rejected
 
-#res
-
 # Bathroom category comparison
 bath_price = df.groupby('BATH')['PRICE'].mean().reset_index()
 
@@ -188,6 +185,10 @@ for group in bed_groups:
     with st.expander(f"Group {group}"):
         unique_beds = df[df['BEDS_GROUP'] == group]['BEDS'].unique().astype(str)
         st.write(f"Includes bed counts: {', '.join(unique_beds)}")
+
+df['combined_cols'] = df['BEDS_GROUP'].astype(str) + df['BATH_GROUP'].astype(str) + df['TYPE'].astype(str)
+value_counts = df['combined_cols'].value_counts()
+df = df[df['combined_cols'].isin(value_counts[value_counts >= 8].index)]
 
 categorical_cols = ['BEDS_GROUP', 'BATH_GROUP','TYPE']
 
@@ -247,10 +248,15 @@ with col2:
         </div>
     </div>
     """, unsafe_allow_html=True)
+
 # Train/Test slider control
 st.subheader("Test Size Allocation (%)")
 test_size = st.select_slider(label="", value=25, options=[i for i in range(5,35,5)])
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+
+def make_scaler(feature):
+    scaler = MinMaxScaler()
+    feature = scaler.fit_transform(feature.values.reshape(-1, 1))
+    return feature , scaler
 
 # Model training and evaluation
 def train_and_evaluate_model(model, scaler, X_train, y_train, X_test, y_test):
@@ -275,96 +281,126 @@ def train_and_evaluate_model(model, scaler, X_train, y_train, X_test, y_test):
 
     return ret
 
-# Ensemble 
 models = [
-        LinearRegression(),
-        DecisionTreeRegressor(criterion='squared_error', max_depth=5),
-        RandomForestRegressor(criterion='squared_error', max_depth=5),
-        KNeighborsRegressor(n_neighbors=5, weights='distance', algorithm='auto')
-        ]
-
+         LinearRegression(),
+         DecisionTreeRegressor(criterion= 'squared_error' ,  random_state=rs),
+         RandomForestRegressor( n_estimators=100,criterion= 'friedman_mse',random_state=rs),
+         KNeighborsRegressor(n_neighbors=5 , weights='distance' , algorithm='auto')
+         ]
 
 # Spinner 
 with st.spinner("Preparing data..."):
-    x_scaler = MinMaxScaler()
-    X_train['PROPERTYSQFT'] = x_scaler.fit_transform(X_train['PROPERTYSQFT'].values.reshape(-1,1))
-    X_test['PROPERTYSQFT'] = x_scaler.transform(X_test['PROPERTYSQFT'].values.reshape(-1,1))
+
+    X['Area'] = X['PROPERTYSQFT']
+    X['Area_sqrt'] = np.sqrt(X['Area'])
+    X['Area_log'] = np.log(X['Area'])
+    X['Area_2'] = X['Area'] ** 2
+    X['Area_3'] = X['Area'] ** 3
+
+
+    X['Lat'] = X['LATITUDE']
+    X['Lat_2'] = X['Lat'] ** 2
+    X['Lat_3'] = X['Lat'] ** 3
+
+    X['Lon'] = X['LONGITUDE']
+    X['Lon_2'] = X['Lon'] ** 2
+    X['Lon_3'] = X['Lon'] ** 3
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.25, random_state = 42, stratify=X['combined_cols'])
+
+    X_train['Area'] , area_scaler = make_scaler(X_train['Area'])
+    X_train['Area_sqrt'] , area_sqrt_scaler = make_scaler(X_train['Area_sqrt'])
+    X_train['Area_log'] , area_log_scaler = make_scaler(X_train['Area_log'])
+    X_train['Area_2'] , area_2_scaler = make_scaler(X_train['Area_2'])
+    X_train['Area_3'] , area_3_scaler = make_scaler(X_train['Area_3'])
+
+    X_test['Area'] = area_scaler.transform(X_test['Area'].values.reshape(-1, 1))
+    X_test['Area_sqrt'] = area_sqrt_scaler.transform(X_test['Area_sqrt'].values.reshape(-1, 1))
+    X_test['Area_log'] = area_log_scaler.transform(X_test['Area_log'].values.reshape(-1, 1))
+    X_test['Area_2'] = area_2_scaler.transform(X_test['Area_2'].values.reshape(-1, 1)) 
+    X_test['Area_3'] = area_3_scaler.transform(X_test['Area_3'].values.reshape(-1, 1))
+
+    X_train['Lat'] , lat_scaler = make_scaler(X_train['Lat'])
+    X_train['Lat_2'] , lat_2_scaler = make_scaler(X_train['Lat_2'])
+    X_train['Lat_3'] , lat_3_scaler = make_scaler(X_train['Lat_3'])
+
+    X_test['Lat'] = lat_scaler.transform(X_test['Lat'].values.reshape(-1, 1))
+    X_test['Lat_2'] = lat_2_scaler.transform(X_test['Lat_2'].values.reshape(-1, 1)) 
+    X_test['Lat_3'] = lat_3_scaler.transform(X_test['Lat_3'].values.reshape(-1, 1))
+
+    X_train['Lon'] , lon_scaler = make_scaler(X_train['Lon'])
+    X_train['Lon_2'] , lon_2_scaler = make_scaler(X_train['Lon_2'])
+    X_train['Lon_3'] , lon_3_scaler = make_scaler(X_train['Lon_3'])
+
+    X_test['Lon'] = lon_scaler.transform(X_test['Lon'].values.reshape(-1, 1))
+    X_test['Lon_2'] = lon_2_scaler.transform(X_test['Lon_2'].values.reshape(-1, 1)) 
+    X_test['Lon_3'] = lon_3_scaler.transform(X_test['Lon_3'].values.reshape(-1, 1))
 
     y_scaler = MinMaxScaler()
-    y_train = y_scaler.fit_transform(y_train.values.reshape(-1,1))
-    y_test = y_scaler.transform(y_test.values.reshape(-1,1))
+    y_train = y_scaler.fit_transform(y_train.values.reshape(-1, 1)) 
+    y_test = y_scaler.transform(y_test.values.reshape(-1, 1))
 
-    with st.expander("Dataset Dimensions"):
-        st.write(f"X_train shape: {X_train.shape}")
-        st.write(f"y_train shape: {y_train.shape}")
-        st.write(f"X_test shape: {X_test.shape}")
-        st.write(f"y_test shape: {y_test.shape}")
+    drop_cols = ['BEDS' , 'BATH' , 'PROPERTYSQFT' , 'combined_cols' , 'LATITUDE' , 'LONGITUDE']
 
-    results = []
-    # Re-training progress bar
-    for model in stqdm(models, desc="Training models "):
-        result = train_and_evaluate_model(model, y_scaler, X_train, y_train, X_test, y_test)
-        results.append(result)
+    X_train = X_train.drop(columns = drop_cols)
+    X_test = X_test.drop(columns = drop_cols)
 
-    st.success("Training complete!") # completion notification
+    rf = RandomForestRegressor(
+        n_estimators=100,
+        criterion= 'friedman_mse',
+        random_state=rs
+    )
 
-fig = make_subplots(rows=2, cols=2, 
-                    subplot_titles=[f"{result['model_name']}" for result in results])
-row_idx = 1
-col_idx = 1
+    rf.fit(X_train, y_train)
+    st.subheader("Random Forest Feature Importance")
+    feat_imp = pd.DataFrame([X_train.columns.transpose() , rf.feature_importances_.transpose()] , index = ['feature' , 'importance']).transpose().sort_values(by = 'importance' , ascending = False)
+    feat_imp['cumulative_importance'] = feat_imp['importance'].cumsum()
+    st.dataframe(feat_imp)
 
-y_train = np.exp(y_scaler.inverse_transform(y_train.reshape(-1,1)))
+    st.subheader("Selected Features:")   
+    model_features = feat_imp[feat_imp['cumulative_importance'] <= 0.65]['feature'].values.tolist()
+    st.dataframe(model_features)
+    results = [train_and_evaluate_model(model, y_scaler, X_train[model_features], y_train, X_test[model_features], y_test) for model in models]
 
-for _, result in enumerate(results):
-    if row_idx > 2:
-        row_idx = 1
-        col_idx += 1
+    fig = make_subplots(rows=2, cols=2, subplot_titles=[f"{result['model_name']}" for result in results])
 
-    y_train_pred = np.exp(result['y_train_pred'])
-    res = y_train_pred - y_train
+    row_idx = 1
+    col_idx = 1
 
-    fig.add_trace(go.Scatter(x=y_train_pred.ravel(), y=res.ravel(), 
-                             mode='markers', name=result['model_name'], 
-                             hovertext=y_train.ravel(), hoverinfo='text'), 
-                            row=row_idx, col=col_idx)
-    row_idx += 1
+    y_train = np.exp(y_scaler.inverse_transform(y_train.reshape(-1, 1)))
 
-fig.update_layout(
-        height=1200,
+
+    for _ , result in enumerate(results):
+    
+        if row_idx > 2:
+            row_idx = 1
+            col_idx += 1
+    
+        y_train_pred = np.exp(result['y_train_pred'])
+        res = y_train_pred - y_train
+
+        fig.add_trace(
+            go.Scatter(
+                x=y_train_pred.ravel(),
+                y=res.ravel(),
+                mode='markers' ,
+                name = result['model_name'] ,
+                hovertext=y_train.ravel() ,
+                hoverinfo='text'),
+            row=row_idx, col=col_idx
+            )
+        fig.update_yaxes(title_text="Residual", row=row_idx, col=col_idx)
+        fig.update_xaxes(title_text="Predicted Price", row=row_idx, col=col_idx)
+        row_idx += 1
+
+    fig.update_layout(
+        height=1200,  
         width=1300,
         xaxis_title="Predicted Price",
-        yaxis_title="Residuals",
+        yaxis_title="Residuals",  
         title_text="Residual Plots for each model"
-        )
+    )
 
-st.plotly_chart(fig, use_container_width=True)
-
-# Y test 
-y_test = np.exp(y_scaler.inverse_transform(y_test.reshape(-1,1)))
-
-fig = make_subplots(rows=2, cols=2, subplot_titles=[f"{result['model_name']} RMSE = {result['test_rmse']:.2f}" for result in results])
-
-row_idx = 1
-col_idx = 1
-
-for _, result in enumerate(results):
-    if row_idx > 2:
-        row_idx = 1
-        col_idx += 1
-
-    y_test_pred = np.exp(result['y_test_pred'])
-
-    fig.add_trace(go.Scatter(x=y_test.ravel(), y=y_test_pred.ravel(), mode='markers', name=result['model_name']), row=row_idx, col=col_idx)
-
-    row_idx += 1
-
-fig.update_layout(
-        xaxis_title="Actual Price",
-        yaxis_title="Predicted Price",
-        height=1200,
-        width=1300,
-        title_text='Predicted vs actual prices on test set'
-        )
 
 st.plotly_chart(fig, use_container_width=True)
 
