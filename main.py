@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import sklearn as skn
 import plotly.express as px
 import seaborn as sns
+import pydeck as pdk
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -34,7 +35,7 @@ import streamlit as st
 from stqdm import stqdm
 
 df = pd.read_csv('NY-House-Dataset.csv')
-set_cols = ['TYPE', 'BEDS', 'BATH', 'PROPERTYSQFT', 'PRICE']
+set_cols = ['TYPE', 'BEDS', 'BATH', 'PROPERTYSQFT', 'LATITUDE', 'LONGITUDE', 'PRICE']
 df = df[set_cols]
 
 st.set_page_config(layout="wide")
@@ -196,6 +197,30 @@ y = np.log(df['PRICE'])
 for col in categorical_cols:
     X[col] = X[col].astype('category')
     X[col] = X[col].cat.codes
+
+# 3D plot of lat/long locations
+st.subheader(":world_map: Map of Property Listings (NY Area)", divider="grey")
+# drop n/a vals
+map_df = df[['LATITUDE', 'LONGITUDE', 'TYPE', 'PRICE']].dropna()
+
+layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=map_df,
+        get_position='[LONGITUDE, LATITUDE]',
+        get_color='[200,30,0,160]',
+        get_radius=200,
+        )
+
+view_state = pdk.ViewState(
+        latitude=40.7128,
+        longitude=-74.0060,
+        zoom=9,
+        pitch=30
+        )
+
+
+# Render 3d chart
+st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{TYPE}\n${PRICE}"}))
 
 # Train/Test slider control
 st.subheader("Test Size Allocation (%)")
